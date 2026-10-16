@@ -1,0 +1,211 @@
+name: Build Flutter APK
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.2'
+          channel: 'stable'
+
+      - name: Generate Flutter Project and Main Code
+        run: |
+          # 1. إنشاء هيكل فلاتر الكامل
+          flutter create . --org com.game.brick --project-name brick_breaker --platforms android
+          
+          # 2. إنشاء كود اللعبة مباشرة داخل main.dart
+          cat << 'EOF' > lib/main.dart
+          import 'package:flutter/material.dart';
+          import 'dart:async';
+
+          void main() {
+            runApp(const BrickBreakerApp());
+          }
+
+          class BrickBreakerApp extends StatelessWidget {
+            const BrickBreakerApp({Key? key}) : super(key: key);
+
+            @override
+            Widget build(BuildContext context) {
+              return MaterialApp(
+                title: 'كاسر الطوب',
+                debugShowCheckedModeBanner: false,
+                theme: ThemeData.dark(),
+                home: const GameScreen(),
+              );
+            }
+          }
+
+          class GameScreen extends StatefulWidget {
+            const GameScreen({Key? key}) : super(key: key);
+
+            @override
+            State<GameScreen> createState() => _GameScreenState();
+          }
+
+          class _GameScreenState extends State<GameScreen> {
+            double ballX = 0;
+            double ballY = 0;
+            double ballXVelocity = 0.02;
+            double ballYVelocity = 0.03;
+            double playerX = -0.4;
+            double playerWidth = 0.4;
+            bool isPlaying = false;
+            int score = 0;
+            Timer? gameTimer;
+
+            void startGame() {
+              setState(() {
+                isPlaying = true;
+                score = 0;
+                ballX = 0;
+                ballY = 0;
+              });
+
+              gameTimer = Timer.periodic(const Duration(milliseconds: 16), (timer) {
+                setState(() {
+                  ballX += ballXVelocity;
+                  ballY += ballYVelocity;
+
+                  if (ballX < -1 || ballX > 1) ballXVelocity = -ballXVelocity;
+                  if (ballY < -1) ballYVelocity = -ballYVelocity;
+
+                  if (ballY >= 0.80 && ballY <= 0.85) {
+                    if (ballX >= playerX && ballX <= playerX + playerWidth) {
+                      ballYVelocity = -ballYVelocity;
+                      score += 5;
+                    }
+                  }
+
+                  if (ballY > 1) {
+                    timer.cancel();
+                    isPlaying = false;
+                  }
+                });
+              });
+            }
+
+            void movePlayer(double delta) {
+              setState(() {
+                playerX += delta;
+                if (playerX < -1) playerX = -1;
+                if (playerX + playerWidth > 1) playerX = 1 - playerWidth;
+              });
+            }
+
+            @override
+            void dispose() {
+              gameTimer?.cancel();
+              super.dispose();
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                backgroundColor: const Color(0xFF0F172A),
+                body: SafeArea(
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('النقاط: $score', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.amber)),
+                            Text(isPlaying ? 'اللعبة جارية' : 'اضغط ابدأ', style: const TextStyle(fontSize: 16, color: Colors.white70)),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Container(
+                          margin: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.blueAccent, width: 2),
+                            borderRadius: BorderRadius.circular(15),
+                            color: const Color(0xFF020617),
+                          ),
+                          child: Stack(
+                            children: [
+                              Align(
+                                alignment: Alignment(ballX, ballY),
+                                child: Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
+                                ),
+                              ),
+                              Align(
+                                alignment: Alignment(playerX, 0.85),
+                                child: Container(
+                                  width: 120,
+                                  height: 18,
+                                  decoration: BoxDecoration(color: Colors.blueAccent, borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(20.0),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey, padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)),
+                                  onPressed: () => movePlayer(-0.15),
+                                  child: const Icon(Icons.arrow_back, size: 28),
+                                ),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey, padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)),
+                                  onPressed: () => movePlayer(0.15),
+                                  child: const Icon(Icons.arrow_forward, size: 28),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 15),
+                            if (!isPlaying)
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.green, padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15)),
+                                onPressed: startGame,
+                                child: const Text('بدء اللعبة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+          }
+          EOF
+
+          flutter pub get
+
+      - name: Build APK Release
+        run: flutter build apk --release
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: build/app/outputs/flutter-apk/app-release.apk
